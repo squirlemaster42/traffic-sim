@@ -1,20 +1,6 @@
-// A curve consists of x0, y0, x1, y1 and two control pointx cx0, cy0, cx1, cy1
-const curves = [];
-
-//When the user user is selecting points
-//they will cycle through the following states
-// p0 (selecting the first point)
-// p1 (selecting the second point)
-// c0 (selecting the first control point)
-// c1 (selecting the second control point)
-let state = "p0"
-
+// A point consists of x, y
+const points = [];
 const rectSize = 10;
-
-// TODO:
-// - Point selecting state machine
-// - Draw draw curves
-// - Allow users to edit curves
 
 function draw() {
     const canvas = document.getElementById('canv');
@@ -31,78 +17,106 @@ function addPoint(event, canvas, ctx, offsetX, offsetY) {
     const x = event.pageX - offsetX - (rectSize / 2);
     const y = event.pageY - offsetY - (rectSize / 2);
 
-    let actingCurve = {};
-
-    //We want to skip p0 if the length of
-    //curves is > 0 and set the first point of the new curve
-    //to p1 of the previous
-
-    if (curves.length > 0 && state !== "p0") {
-        actingCurve = curves[curves.length - 1];
-    } else if (curves.length > 0 && state === "p0") {
-        prevCurve = curves[curves.length - 1];
-        actingCurve.x0 = prevCurve.x1;
-        actingCurve.y0 = prevCurve.y1;
-        curves.push(actingCurve);
-        state = "p1";
-    } else {
-        curves.push(actingCurve);
-    }
-
-    switch (state) {
-        case "p0":
-            actingCurve.x0 = x;
-            actingCurve.y0 = y;
-            state = "p1";
-            break;
-        case "p1":
-            actingCurve.x1 = x;
-            actingCurve.y1 = y;
-            state = "c0";
-            break;
-        case "c0":
-            actingCurve.cx0 = x;
-            actingCurve.cy0 = y;
-            state = "c1";
-            break;
-        case "c1":
-            actingCurve.cx1 = x;
-            actingCurve.cy1 = y;
-            state = "p0";
-            break;
-        default:
-            console.log("Invalid state detected: " + state);
-    }
-
-    console.log(state);
-    console.log(curves);
+    points.push({
+        x: x,
+        y: y,
+    });
 
     drawCurves(canvas, ctx)
 }
 
 function drawCurves(canvas, ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
 
-    ctx.beginPath();
-    for (p in curves) {
-        ctx.fillStyle = "black";
-        ctx.fillRect(curves[p].x0, curves[p].y0, rectSize, rectSize);
-        ctx.fillRect(curves[p].x1, curves[p].y1, rectSize, rectSize);
-        ctx.fillStyle = "blue";
-        ctx.fillRect(curves[p].cx0, curves[p].cy0, rectSize, rectSize);
-        ctx.fillRect(curves[p].cx1, curves[p].cy1, rectSize, rectSize);
+//TODO You need to reweite this code to handle your point array instead of what it expects
 
-        if (curves[p].cx0) {
-            ctx.moveTo(curves[p].x0 + (rectSize / 2), curves[p].y0 + (rectSize / 2));
-            ctx.bezierCurveTo(curves[p].cx0,
-                curves[p].cy0,
-                curves[p].cx1,
-                curves[p].cy1,
-                curves[p].x1 + (rectSize / 2),
-                curves[p].y1 + (rectSize / 2));
+//Inspiration: https://github.com/gdenisov/cardinal-spline-js/blob/master/src/curve.js
+function computeSplinePoints() {
+    'use strict';
+
+    const tension = 0.5;
+    const segments = 25;
+    const close = false;
+
+    let pts;
+    let i = 1;
+    let l = points.length;
+    let rPos = 0;
+    let rLen = (l - 2) * (close ? 2 * segments : 0);
+    let res = new Float32Array(rLen);
+    let cache = new Float32Array((segments + 2) * 4);
+    let cachePts = 4;
+
+    pts = points.slice(0);
+
+    if (close) {
+        pts.unshift(points[l - 1]);
+        pts.unshift(points[l - 2]);
+        pts.push(points[0], points[1]);
+    } else {
+        pts.unshift(points[1]);
+        pts.unshift(points[0]);
+        pts.push(points[l - 2], points[l - 1]);
+    }
+
+    cache[0] = 1;
+
+    for (; i < segments; i++) {
+        let st = 1 / segments;
+        let st2 = st * st;
+        let st3 = st2 * st;
+        let st23 = st3 * 2;
+        let st32 = st2 * 3;
+
+        cache[cachePts++] = st23 - st32 + 1;
+        cache[cachePts++] = st32 - st23;
+        cache[cachePts++] = st3 - 2 * st2 + st;
+        cache[cachePts++] = st3 - st2;
+    }
+
+    cache[++cachePts] = 1;
+
+    parse(pts, cache, l);
+
+    if (close) {
+        pts = [];
+        pts.push(points[l - 4], points[l - 3], points[l - 2], points[l - 1]);
+        pts.push(points[0], points[1], points[2], points[3]);
+        parse(pts, cache, 4);
+    }
+
+    function parse(pts, cache, l) {
+        let t;
+        for (let i = 2; i < l; i += 2) {
+            let pt1 = pts[i];
+            let pt2 = pts[i + 1];
+            let pt3 = pts[i + 2];
+            let pt4 = pts[i + 3];
+
+            let t1x = (pt3 - pts[i - 2]) * tension;
+            let t1y = (pt4 - pts[i - 1]) * tension;
+            let t2x = (pts[i + 4] - pt2) * tension;
+            let t2y = (pts[i + 5] - pt2) * tension;
+
+            for (t = 0; t < segments; t++) {
+                let c = t << 2; // times 4
+                let c1 = cache[c];
+                let c2 = cache[c + 1];
+                let c3 = cache[c + 2];
+                let c4 = cache[c + 3];
+
+                res[rPos++] = c1 * pt1 + c2 * pt3 + c3 * t1x + c4 * t2x;
+                res[rPos++] = c1 * pt2 + c2 * pt4 + c3 * t1y + c4 * t2y;
+            }
         }
     }
-    ctx.stroke();
+
+    l = close ? 0 : points.length - 2;
+    res[rPos++] = points[l];
+    res[rPos] = points[l + 1];
+
+    return res;
 }
 
 window.addEventListener('load', draw);
