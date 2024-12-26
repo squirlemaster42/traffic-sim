@@ -27,43 +27,70 @@ function addPoint(event, canvas, ctx, offsetX, offsetY) {
 
 function drawCurves(canvas, ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (let p of points) {
+        ctx.fillRect(p.x - (rectSize / 2), p.y - (rectSize / 2), rectSize, rectSize);
+    }
+
+    //let p = new Float32Array(points.length * 2);
+    let p = [];
+    let j = 0;
+    for (let i = 0; i < points.length; i++) {
+        p[j] = points[i].x;
+        p[j + 1] = points[i].y;
+        j += 2
+    }
+    let spline = computeSplinePoints(p);
+
+    let l = spline.length;
+    for (let i = 0; i < l; i += 2) {
+        ctx.lineTo(spline[i], spline[i + 1]);
+    }
+    ctx.stroke();
 }
 
-//TODO You need to reweite this code to handle your point array instead of what it expects
-
 //Inspiration: https://github.com/gdenisov/cardinal-spline-js/blob/master/src/curve.js
-function computeSplinePoints() {
+function computeSplinePoints(p) {
     'use strict';
 
     const tension = 0.5;
     const segments = 25;
-    const close = false;
+    const close = false; //TODO Figure out how we want to set this
+    // One idea is we have a concept of editing and not editing
+    // and then when you are not editing you are done
+    // other idea is we check if the last point is close to the first point
+    // and then you're done
 
     let pts;
     let i = 1;
-    let l = points.length;
+    let l = p.length;
     let rPos = 0;
-    let rLen = (l - 2) * (close ? 2 * segments : 0);
+    /*
+    let rLen = (l - 2) * segments + 2 + (close ? 2 * segments : 0);
     let res = new Float32Array(rLen);
     let cache = new Float32Array((segments + 2) * 4);
+    */
+    let res = [];
+    let cache = [];
     let cachePts = 4;
 
-    pts = points.slice(0);
+    //Copies the array
+    pts = p.slice(0);
 
     if (close) {
-        pts.unshift(points[l - 1]);
-        pts.unshift(points[l - 2]);
-        pts.push(points[0], points[1]);
+        pts.unshift(p[l - 1]); //Move the last point to the start
+        pts.unshift(p[l - 2]); //Move the last point to the start
+        pts.push(p[0], p[1]); //Move the first point last
     } else {
-        pts.unshift(points[1]);
-        pts.unshift(points[0]);
-        pts.push(points[l - 2], points[l - 1]);
+        pts.unshift(p[1]);
+        pts.unshift(p[0]);
+        pts.push(p[l - 2], p[l - 1]);
     }
 
     cache[0] = 1;
 
     for (; i < segments; i++) {
-        let st = 1 / segments;
+        let st = i / segments;
         let st2 = st * st;
         let st3 = st2 * st;
         let st23 = st3 * 2;
@@ -81,14 +108,15 @@ function computeSplinePoints() {
 
     if (close) {
         pts = [];
-        pts.push(points[l - 4], points[l - 3], points[l - 2], points[l - 1]);
-        pts.push(points[0], points[1], points[2], points[3]);
+        pts.push(p[l - 4], p[l - 3], p[l - 2], p[l - 1]);
+        pts.push(p[0], p[1], p[2], p[3]);
         parse(pts, cache, 4);
     }
 
     function parse(pts, cache, l) {
         let t;
         for (let i = 2; i < l; i += 2) {
+
             let pt1 = pts[i];
             let pt2 = pts[i + 1];
             let pt3 = pts[i + 2];
@@ -96,7 +124,7 @@ function computeSplinePoints() {
 
             let t1x = (pt3 - pts[i - 2]) * tension;
             let t1y = (pt4 - pts[i - 1]) * tension;
-            let t2x = (pts[i + 4] - pt2) * tension;
+            let t2x = (pts[i + 4] - pt1) * tension;
             let t2y = (pts[i + 5] - pt2) * tension;
 
             for (t = 0; t < segments; t++) {
@@ -112,9 +140,9 @@ function computeSplinePoints() {
         }
     }
 
-    l = close ? 0 : points.length - 2;
-    res[rPos++] = points[l];
-    res[rPos] = points[l + 1];
+    l = close ? 0 : p.length - 2;
+    res[rPos++] = p[l];
+    res[rPos] = p[l + 1];
 
     return res;
 }
