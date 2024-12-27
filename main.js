@@ -1,6 +1,13 @@
 // A point consists of x, y
-const points = [];
+const ctrlPoints = [];
 const rectSize = 10;
+
+//A car is {
+//  color
+//  distance
+//  speed
+//}
+const cars = [];
 
 function draw() {
     const canvas = document.getElementById('canv');
@@ -11,13 +18,15 @@ function draw() {
     canvas.addEventListener('click', (event) => {
         addPoint(event, canvas, ctx, offsetX, offsetY);
     });
+
+    drawCurves(canvas, ctx);
 }
 
 function addPoint(event, canvas, ctx, offsetX, offsetY) {
     const x = event.pageX - offsetX - (rectSize / 2);
     const y = event.pageY - offsetY - (rectSize / 2);
 
-    points.push({
+    ctrlPoints.push({
         x: x,
         y: y,
     });
@@ -28,123 +37,155 @@ function addPoint(event, canvas, ctx, offsetX, offsetY) {
 function drawCurves(canvas, ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    for (let p of points) {
-        ctx.fillRect(p.x - (rectSize / 2), p.y - (rectSize / 2), rectSize, rectSize);
-    }
-
-    //let p = new Float32Array(points.length * 2);
     let p = [];
     let j = 0;
-    for (let i = 0; i < points.length; i++) {
-        p[j] = points[i].x;
-        p[j + 1] = points[i].y;
+    for (let i = 0; i < ctrlPoints.length; i++) {
+        p[j] = ctrlPoints[i].x;
+        p[j + 1] = ctrlPoints[i].y;
         j += 2
     }
-    let spline = computeSplinePoints(p);
 
-    let l = spline.length;
-    for (let i = 0; i < l; i += 2) {
-        ctx.lineTo(spline[i], spline[i + 1]);
-    }
+    const close = document.querySelector("#done").checked;
+
+    ctx.lineWidth = 20;
+    ctx.beginPath();
+    ctx.moveTo(p[0], p[1]);
+    ctx.curve(p, 0.5, 25, close);
     ctx.stroke();
 }
 
-//Inspiration: https://github.com/gdenisov/cardinal-spline-js/blob/master/src/curve.js
-function computeSplinePoints(p) {
-    'use strict';
+window.addEventListener('load', draw);
 
-    const tension = 0.5;
-    const segments = 25;
-    const close = false; //TODO Figure out how we want to set this
-    // One idea is we have a concept of editing and not editing
-    // and then when you are not editing you are done
-    // other idea is we check if the last point is close to the first point
-    // and then you're done
+const CarSim = {};
 
-    let pts;
-    let i = 1;
-    let l = p.length;
-    let rPos = 0;
-    /*
-    let rLen = (l - 2) * segments + 2 + (close ? 2 * segments : 0);
-    let res = new Float32Array(rLen);
-    let cache = new Float32Array((segments + 2) * 4);
-    */
-    let res = [];
-    let cache = [];
-    let cachePts = 4;
+;(() => {
+    function main(tFrame) {
+        CarSim.stopMain = window.requestAnimationFrame(main);
+        const nextTick = CarSim.lastTick + CarSim.tickLength;
+        let numTicks = 0;
 
-    //Copies the array
-    pts = p.slice(0);
+        if (tFrame > nextTick) {
+            const timeSinceTick = tFrame - CarSim.lastTick;
+            numTicks = Math.floor(timeSinceTick / CarSim.tickLength);
+        }
 
-    if (close) {
-        pts.unshift(p[l - 1]); //Move the last point to the start
-        pts.unshift(p[l - 2]); //Move the last point to the start
-        pts.push(p[0], p[1]); //Move the first point last
-    } else {
-        pts.unshift(p[1]);
-        pts.unshift(p[0]);
-        pts.push(p[l - 2], p[l - 1]);
+        queueUpdates(numTicks);
+        render(tFrame);
+        CarSim.lastRender = tFrame;
     }
 
-    cache[0] = 1;
-
-    for (; i < segments; i++) {
-        let st = i / segments;
-        let st2 = st * st;
-        let st3 = st2 * st;
-        let st23 = st3 * 2;
-        let st32 = st2 * 3;
-
-        cache[cachePts++] = st23 - st32 + 1;
-        cache[cachePts++] = st32 - st23;
-        cache[cachePts++] = st3 - 2 * st2 + st;
-        cache[cachePts++] = st3 - st2;
-    }
-
-    cache[++cachePts] = 1;
-
-    parse(pts, cache, l);
-
-    if (close) {
-        pts = [];
-        pts.push(p[l - 4], p[l - 3], p[l - 2], p[l - 1]);
-        pts.push(p[0], p[1], p[2], p[3]);
-        parse(pts, cache, 4);
-    }
-
-    function parse(pts, cache, l) {
-        let t;
-        for (let i = 2; i < l; i += 2) {
-
-            let pt1 = pts[i];
-            let pt2 = pts[i + 1];
-            let pt3 = pts[i + 2];
-            let pt4 = pts[i + 3];
-
-            let t1x = (pt3 - pts[i - 2]) * tension;
-            let t1y = (pt4 - pts[i - 1]) * tension;
-            let t2x = (pts[i + 4] - pt1) * tension;
-            let t2y = (pts[i + 5] - pt2) * tension;
-
-            for (t = 0; t < segments; t++) {
-                let c = t << 2; // times 4
-                let c1 = cache[c];
-                let c2 = cache[c + 1];
-                let c3 = cache[c + 2];
-                let c4 = cache[c + 3];
-
-                res[rPos++] = c1 * pt1 + c2 * pt3 + c3 * t1x + c4 * t2x;
-                res[rPos++] = c1 * pt2 + c2 * pt4 + c3 * t1y + c4 * t2y;
-            }
+    function queueUpdates(numTicks) {
+        for (let i = 0; i < numTicks; i++) {
+            CarSim.lastTick += CarSim.tickLength;
+            update(CarSim.lastTick);
         }
     }
 
-    l = close ? 0 : p.length - 2;
-    res[rPos++] = p[l];
-    res[rPos] = p[l + 1];
+    CarSim.lastTick = performance.now();
+    CarSim.lastRender = CarSim.lastTick;
+    CarSim.tickLength = 50;
 
-    return res;
+    setInitalState();
+    main(performance.now());
+})();
+
+function setInitalState() {
+
 }
 
-window.addEventListener('load', draw);
+function render(tFrame) {
+
+}
+
+function update(lastTick) {
+
+}
+
+
+// ---------- LIBRARY FUNCTIONS ------------
+// https://github.com/pkorac/cardinal-spline-js/tree/master
+CanvasRenderingContext2D.prototype.curve = function(points, tension, numOfSeg, close) {
+	'use strict';
+
+	// options or defaults
+	tension = (typeof tension === 'number') ? tension : 0.5;
+	numOfSeg = numOfSeg ? numOfSeg : 20;
+
+	var pts,					// clone point array
+		res = [],
+		l = points.length, i,
+		cache = new Float32Array((numOfSeg+2)*4),
+		cachePtr = 4;
+
+	pts = points.slice(0);
+
+	if (close) {
+		pts.unshift(points[l - 1]); // insert end point as first point
+		pts.unshift(points[l - 2]);
+		pts.push(points[0], points[1]); // first point as last point
+	} else {
+		pts.unshift(points[1]);	// copy 1. point and insert at beginning
+		pts.unshift(points[0]);
+		pts.push(points[l - 2], points[l - 1]);	// duplicate end-points
+	}
+
+	// cache inner-loop calculations as they are based on t alone
+	cache[0] = 1;
+
+	for (i = 1; i < numOfSeg; i++) {
+
+		var st = i / numOfSeg,
+			st2 = st * st,
+			st3 = st2 * st,
+			st23 = st3 * 2,
+			st32 = st2 * 3;
+
+		cache[cachePtr++] =	st23 - st32 + 1;	// c1
+		cache[cachePtr++] =	st32 - st23;		// c2
+		cache[cachePtr++] =	st3 - 2 * st2 + st;	// c3
+		cache[cachePtr++] =	st3 - st2;			// c4
+	}
+
+	cache[++cachePtr] = 1;
+
+	// calc. points
+	parse(pts, cache, l);
+
+	if (close) {
+		//l = points.length;
+		pts = [];
+		pts.push(points[l - 4], points[l - 3], points[l - 2], points[l - 1]); // second last and last
+		pts.push(points[0], points[1], points[2], points[3]); // first and second
+		parse(pts, cache, 4);
+	}
+
+	function parse(pts, cache, l) {
+		for (var i = 2; i < l; i += 2) {
+
+			var pt1 = pts[i],
+				pt2 = pts[i+1],
+				pt3 = pts[i+2],
+				pt4 = pts[i+3],
+
+				t1x = (pt3 - pts[i-2]) * tension,
+				t1y = (pt4 - pts[i-1]) * tension,
+				t2x = (pts[i+4] - pt1) * tension,
+				t2y = (pts[i+5] - pt2) * tension;
+
+			for (var t = 0; t <= numOfSeg; t++) {
+
+				var c = t * 4;
+
+				res.push(cache[c] * pt1 + cache[c+1] * pt3 + cache[c+2] * t1x + cache[c+3] * t2x,
+						 cache[c] * pt2 + cache[c+1] * pt4 + cache[c+2] * t1y + cache[c+3] * t2y);
+			}
+		}
+	}
+
+	// add lines to path
+    for(i = 0, l = res.length; i < l; i += 2) {
+		this.lineTo(res[i], res[i+1]);
+    }
+
+	return res;
+};
