@@ -1,62 +1,31 @@
-// A point consists of x, y
-const ctrlPoints = [];
-const rectSize = 10;
+function addPoint(event, offsetX, offsetY) {
+    const x = event.pageX - offsetX - (CarSim.rectSize / 2);
+    const y = event.pageY - offsetY - (CarSim.rectSize / 2);
 
-//A car is {
-//  color
-//  distance
-//  speed
-//}
-const cars = [];
-
-function draw() {
-    const canvas = document.getElementById('canv');
-    const ctx = canvas.getContext('2d');
-    const offsetX = canvas.offsetLeft + canvas.clientLeft;
-    const offsetY = canvas.offsetTop + canvas.clientTop;
-
-    canvas.addEventListener('click', (event) => {
-        addPoint(event, canvas, ctx, offsetX, offsetY);
-    });
-
-    drawCurves(canvas, ctx);
-}
-
-function addPoint(event, canvas, ctx, offsetX, offsetY) {
-    const x = event.pageX - offsetX - (rectSize / 2);
-    const y = event.pageY - offsetY - (rectSize / 2);
-
-    ctrlPoints.push({
+    CarSim.ctrlPoints.push({
         x: x,
         y: y,
     });
-
-    drawCurves(canvas, ctx)
 }
 
-function drawCurves(canvas, ctx) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+const CarSim = {
+    // A point consists of x, y
+    ctrlPoints: [],
+    road: [],
+    rectSize: 10,
 
-    let p = [];
-    let j = 0;
-    for (let i = 0; i < ctrlPoints.length; i++) {
-        p[j] = ctrlPoints[i].x;
-        p[j + 1] = ctrlPoints[i].y;
-        j += 2
-    }
-
-    const close = document.querySelector("#done").checked;
-
-    ctx.lineWidth = 20;
-    ctx.beginPath();
-    ctx.moveTo(p[0], p[1]);
-    ctx.curve(p, 0.5, 25, close);
-    ctx.stroke();
-}
-
-window.addEventListener('load', draw);
-
-const CarSim = {};
+    //A car is {
+        //  color
+        //  distance
+        //  speed
+    //}
+    cars: [],
+    canvas: null,
+    renderContext: null,
+    canvasInitialized: false,
+    xOffset: 0,
+    yOffset: 0
+};
 
 ;(() => {
     function main(tFrame) {
@@ -89,15 +58,86 @@ const CarSim = {};
     main(performance.now());
 })();
 
-function setInitalState() {
+window.addEventListener('load', initCanvas);
+
+function initCanvas() {
+    CarSim.canvas = document.getElementById('canv');
+    CarSim.renderContext = CarSim.canvas.getContext('2d');
+    CarSim.xOffset = CarSim.canvas.offsetLeft + CarSim.canvas.clientLeft;
+    CarSim.yOffset = CarSim.canvas.offsetTop + CarSim.canvas.clientTop;
+    CarSim.canvasInitialized = true;
+
+    CarSim.canvas.addEventListener('click', (event) => {
+        addPoint(event, CarSim.xOffset, CarSim.yOffset);
+    });
 }
 
+function setInitalState() { }
+
 function render(tFrame) {
+    if (!CarSim.canvasInitialized) {
+        return;
+    }
+
+    CarSim.renderContext.clearRect(0, 0, CarSim.canvas.width, CarSim.canvas.height);
+
+    let p = [];
+    let j = 0;
+    for (let i = 0; i < CarSim.ctrlPoints.length; i++) {
+        p[j] = CarSim.ctrlPoints[i].x;
+        p[j + 1] = CarSim.ctrlPoints[i].y;
+        j += 2
+    }
+
+    const close = document.querySelector("#done").checked;
+
+    //Draw Road
+    CarSim.renderContext.lineWidth = 20;
+    CarSim.renderContext.fullStyle = "black";
+    CarSim.renderContext.beginPath();
+    CarSim.renderContext.moveTo(p[0], p[1]);
+    //I think we should cache the spline for so that we dont need to recompute it in the render loop
+    CarSim.road = CarSim.renderContext.curve(p, 0.5, 25, close);
+    CarSim.renderContext.stroke();
+
+    //Draw Cars
+    for (let car of CarSim.cars) {
+        CarSim.renderContext.fillStyle = car.color;
+        CarSim.renderContext.fillRect(CarSim.road[car.distance],
+            CarSim.road[car.distance + 1],
+            CarSim.rectSize,
+            CarSim.rectSize);
+    }
 }
 
 function update(lastTick) {
+    for (let car of CarSim.cars) {
+        car.distance += 2;
+        if (car.distance >= CarSim.road) {
+            car.distance = 0;
+        }
+    }
 }
 
+function addCar() {
+    car = {
+        distance: 0,
+        color: getRandomColor(),
+        speed: 5 //TODO get speed from input
+    }
+
+    CarSim.cars.push(car);
+}
+
+function getRandomColor() {
+    var letters = '0123456789ABCDEF';
+    var color = '#';
+    for (var i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+    }
+
+    return color;
+}
 
 // ---------- LIBRARY FUNCTIONS ------------
 // https://github.com/pkorac/cardinal-spline-js/tree/master
