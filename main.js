@@ -90,15 +90,12 @@ const CarSim = {};
 })();
 
 function setInitalState() {
-
 }
 
 function render(tFrame) {
-
 }
 
 function update(lastTick) {
-
 }
 
 
