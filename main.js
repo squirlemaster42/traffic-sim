@@ -12,7 +12,7 @@ const CarSim = {
     // A point consists of x, y
     ctrlPoints: [],
     road: [],
-    rectSize: 10,
+    rectSize: 26,
 
     //A car is {
         //  color
@@ -103,8 +103,8 @@ function render(tFrame) {
     //Draw Cars
     for (let car of CarSim.cars) {
         CarSim.renderContext.fillStyle = car.color;
-        CarSim.renderContext.fillRect(CarSim.road[car.distance],
-            CarSim.road[car.distance + 1],
+        CarSim.renderContext.fillRect(CarSim.road[car.distance] - (CarSim.rectSize / 2),
+            CarSim.road[car.distance + 1] - (CarSim.rectSize / 2),
             CarSim.rectSize,
             CarSim.rectSize);
     }
@@ -112,8 +112,8 @@ function render(tFrame) {
 
 function update(lastTick) {
     for (let car of CarSim.cars) {
-        car.distance += 2;
-        if (car.distance >= CarSim.road) {
+        car.distance += 2 * car.speed;
+        if (car.distance >= CarSim.road.length) {
             car.distance = 0;
         }
     }
@@ -123,7 +123,7 @@ function addCar() {
     car = {
         distance: 0,
         color: getRandomColor(),
-        speed: 5 //TODO get speed from input
+        speed: 1 //TODO get speed from input
     }
 
     CarSim.cars.push(car);
